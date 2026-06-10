@@ -57,7 +57,7 @@ public class AccountVirtualVsPlatformDemo {
                     shared.deposit(DEPOSIT_AMOUNT);
                     // simulate some small blocking work
                     try {
-                        Thread.sleep(1);
+                        Thread.sleep(100);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }
@@ -78,8 +78,7 @@ public class AccountVirtualVsPlatformDemo {
         log.info("[platform] Final balance   = {}", finalBalance);
         log.info("[platform] Expected balance = {}", expectedTotal());
         log.info("[platform] Correct result?  = {}", finalBalance == expectedTotal());
-        log.info("[platform] Time             = {} ms ({} s)",
-                duration.toMillis(), duration.toMillis() / 1000.0);
+        log.info("[platform] Time             = {} s", duration.toMillis() / 1000);
     }
 
     // Shared mutable account that needs synchronization for platform threads
@@ -102,21 +101,21 @@ public class AccountVirtualVsPlatformDemo {
     private static void runVirtualThreadsWithLocalAccounts() throws Exception {
         log.info("=== Scenario 2: VIRTUAL threads with LOCAL (non-shared) Accounts ===");
 
+        Instant start = Instant.now();
+
         // With virtual threads we can afford ONE THREAD PER TASK.
         // Each task uses its OWN account; no sharing, no synchronization.
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
 
             List<Future<Integer>> futures = new ArrayList<>();
-
-            Instant start = Instant.now();
-
             for (int i = 0; i < TASKS; i++) {
                 futures.add(executor.submit(() -> {
                     LocalAccount account = new LocalAccount();
                     for (int j = 0; j < DEPOSITS_PER_TASK; j++) {
                         account.deposit(DEPOSIT_AMOUNT);
                         try {
-                            Thread.sleep(1);
+                            // simulate some small blocking work
+                            Thread.sleep(100);
                         } catch (InterruptedException e) {
                             Thread.currentThread().interrupt();
                         }
@@ -126,7 +125,7 @@ public class AccountVirtualVsPlatformDemo {
                 }));
             }
 
-            // aggregate results in a single thread: no synchronization needed
+            // aggregate results in a single thread: no synchronization needed, structured programing
             int total = 0;
             for (Future<Integer> f : futures) {
                 total += f.get();
@@ -138,8 +137,7 @@ public class AccountVirtualVsPlatformDemo {
             log.info("[virtual] Final balance   = {}", total);
             log.info("[virtual] Expected balance = {}", expectedTotal());
             log.info("[virtual] Correct result?  = {}", total == expectedTotal());
-            log.info("[virtual] Time             = {} ms ({} s)",
-                    duration.toMillis(), duration.toMillis() / 1000.0);
+            log.info("[virtual] Time             = {} s", duration.toMillis() / 1000);
         }
     }
 

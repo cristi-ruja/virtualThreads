@@ -22,15 +22,20 @@ public class VirtualThreadsDemo {
         log.info("Simulated blocking per task: {} ms", TASK_SLEEP_MILLIS);
         log.info("------------------------------------------------------");
 
-        runWithPlatformThreads();
+        log.info("=== Running with PLATFORM threads (fixed thread pool) ===");
+        try (ExecutorService executor = Executors.newFixedThreadPool(PLATFORM_POOL_SIZE)) {
+            runThreads(executor);
+        }
+
+        log.info("=== Running with VIRTUAL threads (one per task) ===");
         log.info("");
-        runWithVirtualThreads();
+        try (ExecutorService executorVirtual = Executors.newVirtualThreadPerTaskExecutor()) {
+            runThreads(executorVirtual);
+        }
+
     }
 
-    private static void runWithPlatformThreads() throws Exception {
-        log.info("=== Running with PLATFORM threads (fixed thread pool) ===");
-
-        ExecutorService executor = Executors.newFixedThreadPool(PLATFORM_POOL_SIZE);
+    private static void runThreads(ExecutorService executor) throws Exception {
 
         Instant start = Instant.now();
 
@@ -48,36 +53,11 @@ public class VirtualThreadsDemo {
         executor.shutdown();
 
         Duration duration = Duration.between(start, end);
-        log.info("Platform threads total time: {} ms ({} s)",
-                duration.toMillis(), duration.toMillis() / 1000.0);
-        log.info("Approx active thread count: {}", Thread.activeCount());
+        log.info("threads total time: {} ms ({} s)", duration.toMillis(), duration.toMillis() / 1000.0);
+        log.info("active thread count: {}", Thread.activeCount());
     }
 
-    private static void runWithVirtualThreads() throws Exception {
-        log.info("=== Running with VIRTUAL threads (one per task) ===");
 
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-
-            Instant start = Instant.now();
-
-            List<Future<String>> futures = new ArrayList<>(TASK_COUNT);
-            for (int i = 0; i < TASK_COUNT; i++) {
-                final int taskId = i;
-                futures.add(executor.submit(() -> simulateBlockingCall("virtual", taskId)));
-            }
-
-            for (Future<String> f : futures) {
-                f.get();
-            }
-
-            Instant end = Instant.now();
-            Duration duration = Duration.between(start, end);
-
-            log.info("Virtual threads total time: {} ms ({} s)",
-                    duration.toMillis(), duration.toMillis() / 1000.0);
-            log.info("Approx active thread count: {}", Thread.activeCount());
-        }
-    }
 
     private static String simulateBlockingCall(String type, int taskId) {
         try {

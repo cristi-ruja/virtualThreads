@@ -16,8 +16,8 @@ public class ProducerConsumerVirtualThreads {
     private static final int TOTAL_ITEMS = 500_000;
 
     // Platform thread configuration (simulate realistic small pool)
-    private static final int PLATFORM_PRODUCERS = 40000;
-    private static final int PLATFORM_CONSUMERS = 40000;
+    private static final int PLATFORM_PRODUCERS = 400;
+    private static final int PLATFORM_CONSUMERS = 400;
 
     // Virtual thread configuration (lots of lightweight threads)
     private static final int VIRTUAL_PRODUCERS = 40000;
@@ -46,91 +46,48 @@ public class ProducerConsumerVirtualThreads {
         log.info("VIRTUAL_CONSUMERS  = {}", VIRTUAL_CONSUMERS);
         log.info("=================================================\n");
 
-        runWithPlatformThreads();
+        try (ExecutorService producerPool = Executors.newFixedThreadPool(PLATFORM_PRODUCERS);
+            ExecutorService consumerPool = Executors.newFixedThreadPool(PLATFORM_CONSUMERS)) {
+            runThreads("PLATFORM ", producerPool, consumerPool);
+        }
+
+
         System.gc();
-        log.info("-------------------------------------------------\n");
-        runWithVirtualThreads();
+
+        try (ExecutorService execProducer = Executors.newVirtualThreadPerTaskExecutor();
+             ExecutorService execConsumer= Executors.newVirtualThreadPerTaskExecutor()) {
+            runThreads("VIRTUAL ", execProducer, execConsumer);
+        }
     }
 
-    // -------------------------------------------------
-    // Platform threads scenario
-    // -------------------------------------------------
-    private static void runWithPlatformThreads() throws Exception {
-        log.info("=== Scenario: PLATFORM THREADS ===");
-
-        BlockingQueue<Integer> queue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
-        AtomicInteger producedCounter = new AtomicInteger();
-        AtomicInteger consumedCounter = new AtomicInteger();
-
-        ExecutorService producerPool = Executors.newFixedThreadPool(PLATFORM_PRODUCERS);
-        ExecutorService consumerPool = Executors.newFixedThreadPool(PLATFORM_CONSUMERS);
-
-        Duration duration = runScenario(
-                "platform",
-                queue,
-                producedCounter,
-                consumedCounter,
-                producerPool,
-                consumerPool,
-                PLATFORM_PRODUCERS,
-                PLATFORM_CONSUMERS
-        );
-
-        double seconds = duration.toMillis() / 1000.0;
-        double throughput = TOTAL_ITEMS / seconds;
-
-        log.info("Platform threads: total time = {} ms ({} s)", duration.toMillis(), seconds);
-        log.info("Platform threads: throughput ≈ {} items/s", String.format("%.2f", throughput));
-
-        producerPool.shutdown();
-        consumerPool.shutdown();
-    }
 
     // -------------------------------------------------
     // Virtual threads scenario
     // -------------------------------------------------
-    private static void runWithVirtualThreads() throws Exception {
-        log.info("=== Scenario: VIRTUAL THREADS ===");
+    private static void runThreads(String label, ExecutorService producerPool, ExecutorService consumerPool) throws Exception {
+        log.info("=== Scenario: " + label + " THREADS ===");
 
         BlockingQueue<Integer> queue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
         AtomicInteger producedCounter = new AtomicInteger();
         AtomicInteger consumedCounter = new AtomicInteger();
 
-        try (ExecutorService producerPool = Executors.newVirtualThreadPerTaskExecutor();
-             ExecutorService consumerPool = Executors.newVirtualThreadPerTaskExecutor()) {
 
-            Duration duration = runScenario(
-                    "virtual",
-                    queue,
-                    producedCounter,
-                    consumedCounter,
-                    producerPool,
-                    consumerPool,
-                    VIRTUAL_PRODUCERS,
-                    VIRTUAL_CONSUMERS
-            );
 
-            double seconds = duration.toMillis() / 1000.0;
-            double throughput = TOTAL_ITEMS / seconds;
+        Duration duration = runScenario(label, queue, producedCounter, consumedCounter, producerPool, consumerPool, VIRTUAL_PRODUCERS, VIRTUAL_CONSUMERS);
 
-            log.info("Virtual threads: total time = {} ms ({} s)", duration.toMillis(), seconds);
-            log.info("Virtual threads: throughput ≈ {} items/s", String.format("%.2f", throughput));
-        }
+        double seconds = duration.toMillis() / 1000.0;
+        double throughput = TOTAL_ITEMS / seconds;
+
+        log.info(label + " threads: total time = {} s", seconds);
+        log.info(label +  " threads: throughput ≈ {} items/s", String.format("%.2f", throughput));
+        log.info("-------------------------------------------------\n");
     }
 
     // -------------------------------------------------
     // Shared scenario logic
     // -------------------------------------------------
-    private static Duration runScenario(
-            String label,
-            BlockingQueue<Integer> queue,
-            AtomicInteger producedCounter,
-            AtomicInteger consumedCounter,
-            ExecutorService producerPool,
-            ExecutorService consumerPool,
-            int producersCount,
-            int consumersCount
-    ) throws Exception {
+    private static Duration runScenario(String label, BlockingQueue<Integer> queue, AtomicInteger producedCounter,
+                                        AtomicInteger consumedCounter, ExecutorService producerPool, ExecutorService consumerPool, int producersCount, int consumersCount) throws Exception {
 
         Instant start = Instant.now();
         int baseItemsPerProducer = TOTAL_ITEMS / producersCount;
@@ -184,13 +141,7 @@ public class ProducerConsumerVirtualThreads {
     // -------------------------------------------------
     // Producer / Consumer implementations
     // -------------------------------------------------
-    private static void runProducer(
-            String label,
-            int producerId,
-            int itemsToProduce,
-            BlockingQueue<Integer> queue,
-            AtomicInteger producedCounter
-    ) {
+    private static void runProducer(String label, int producerId, int itemsToProduce, BlockingQueue<Integer> queue, AtomicInteger producedCounter ) {
         try {
             for (int i = 0; i < itemsToProduce; i++) {
                 // Simulate some blocking work (e.g. I/O)
@@ -214,12 +165,7 @@ public class ProducerConsumerVirtualThreads {
         }
     }
 
-    private static void runConsumer(
-            String label,
-            int consumerId,
-            BlockingQueue<Integer> queue,
-            AtomicInteger consumedCounter
-    ) {
+    private static void runConsumer(String label, int consumerId, BlockingQueue<Integer> queue, AtomicInteger consumedCounter) {
         try {
             while (true) {
                 Integer item = queue.take(); // blocks if queue is empty
